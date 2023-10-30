@@ -1,0 +1,762 @@
+---
+title: "Stochastic Modeling Moran"
+output: html_document
+---
+## Replicating figure 3 from this paper, "The effect of population structure on the rate of evolution", Proceedings B
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+{
+  library(pheatmap)
+  library(RColorBrewer)
+  library(fitdistrplus)
+  library(VGAM)
+  library(ggpubr)
+  library(patchwork)
+  library(tidyverse)
+}
+```
+
+```{r Complete Graph}
+#### Vary fitness of invader ####
+
+N<-50 # number of nodes
+prop<-N # proportion of wildtype to mutant. (aka, Wt/Mt=N)
+    ### For 1 mutant only, set prop == N  ###
+
+cycles<-420 # This many simulations will be averaged for each data point
+Pop<-c(round(prop*(N/(prop+1))), N-round(prop*(N/(prop+1)))) #Create population vector based on specified proportions. parental first, then mutant.
+
+fi<-1 #fitness of Parental
+gi<-1.1 #fitness of Mutant
+
+data<-data.frame() # Store the outcome of each trial here
+dataT<-data.frame() # Store the timing of each trial here
+for(gi in seq(from=1, to=5, by=0.25)){ # This will vary the fitness over time.
+  
+  Time<-c() # Store individual trials' times here
+  Outcome<-c() # Store individual trials' outcomes here
+  for (i in 1:cycles){ # This loop makes the simulation take place 'cycles' individual times, which will be averaged together later for each data point in the final graph
+      t<-0 # set time == 0
+      Pop<-c(round(prop*(N/(prop+1))), N-round(prop*(N/(prop+1)))) # Reset the population
+      while(0<Pop[[1]] & Pop[[1]]<N & t <= 50000){ # This means, stop the simulation if either population wins, or if the time exceeds 50K cycles (to prevent endless looping)
+        th1<-(fi*(Pop[[1]]/sum(Pop)))/((fi*(Pop[[1]]/sum(Pop)))+(gi*(Pop[[2]]/sum(Pop)))) # Set the threshold (informed by relative population size and relative fitness) for picking mutant or parental cells to reproduce (if a random number in 0<n<1 is < th, Parent is chosen. Otherwise, mutant wins wins)
+      
+          DV<-runif(1) # (Dummy Variable) Random number between 0 and 1
+        if(DV < th1){ # if the random number is below the threshold,
+          Pop[[1]]<-Pop[[1]]+1 # add one member to the parental pop.
+        } else { #otherwise,
+          Pop[[2]]<-Pop[[2]]+1 #add one member to the mutant pop
+        }
+        DV<-runif(1) # draw a new random number
+        if(DV < Pop[[1]]/sum(Pop)){ # if the number is within the proportion of the pop that is parental,
+          Pop[[1]]<-Pop[[1]]-1 # kill one parental
+        } else { # otherwise,
+          Pop[[2]]<-Pop[[2]]-1 # Kill a mutant
+        }
+        t<-t+1 # keep track of this timestep
+      } #loop back to the beginning of the while loop.
+      Time<-c(Time,t) # Add the results of this trial to the time and outcome dfs
+      Outcome<-c(Outcome, (Pop[[2]]/N)) # this stores a 0 if A wins, and a 1 if B wins
+  }
+  
+  data<-rbind(data, Outcome) # Add the outcomes and times of all cycles at this current fitness value to the data and dataT dfs
+  dataT<-rbind(dataT, Time)
+}
+rownames(data)<-seq(from=1, to=5, by=0.25) # set the rownames equal to the fitness values
+rownames(dataT)<-seq(from=1, to=5, by=0.25)
+s<-c()
+sT<-c()
+for(i in 1:length(data[,1])){ # replace every time value that corresponds to mutant extinction with an NA (don't want to include those times in the average. this makes intuitive sense, and is what the paper did)
+  for(j in 1:length(data[1,])){
+    if (data[i,j]==0){
+      dataT[i,j]<-NA
+    } else{
+      
+    }
+  }
+}
+
+  s<-rowMeans(data, na.rm=TRUE)
+  sT<-rowMeans(dataT, na.rm=TRUE)
+
+
+dataT<-cbind(sT,dataT)
+data<-cbind(s,data)
+
+```
+
+```{r graphing}
+CG1<-ggplot(data=data, aes(x=as.numeric(rownames(data)), y=data[,1]))+
+  geom_point()+
+  stat_smooth(method="loess", color="magenta4")+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Fixation Probability")
+  
+CG2<-ggplot(data=dataT, aes(x=as.numeric(rownames(dataT)), y=dataT[,1]))+
+  geom_point()+
+  stat_smooth(method="loess", color="magenta4")+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Time to Fixation")+
+  scale_y_continuous(trans="log10")
+
+CG1
+CG2
+
+```
+
+```{r Complete Graph 2}
+#### Vary Pop size ####
+#  This is the same exact process as the initial complete graph chunk. The only differences will be commented.
+cycles<-420
+
+fi<-1 
+gi<-1.1 # keep the mutant fitness at a constant 1.1
+
+data2<-data.frame()
+data2T<-data.frame()
+for(N in seq(from=5, to=100, by=5)){ # instead of varying fitness over time, vary population size
+  prop<-N
+
+Time<-c()
+Outcome<-c()
+for (i in 1:cycles){
+  t<-0
+  Pop<-c(round(prop*(N/(prop+1))), N-round(prop*(N/(prop+1)))) 
+  while(0<Pop[[1]] & Pop[[1]]<N & t <= 50000){
+    th1<-(fi*(Pop[[1]]/sum(Pop)))/((fi*(Pop[[1]]/sum(Pop)))+(gi*(Pop[[2]]/sum(Pop)))) 
+    DV<-runif(1)
+    if(DV < th1){
+      Pop[[1]]<-Pop[[1]]+1
+    } else {
+      Pop[[2]]<-Pop[[2]]+1
+    }
+    DV<-runif(1)
+    if(DV < Pop[[1]]/sum(Pop)){
+      Pop[[1]]<-Pop[[1]]-1
+    } else {
+      Pop[[2]]<-Pop[[2]]-1
+    }
+    t<-t+1
+  }
+  Time<-c(Time,t)
+  Outcome<-c(Outcome, (Pop[[2]]/N))
+}
+
+data2<-rbind(data2, Outcome)
+data2T<-rbind(data2T, Time)
+}
+rownames(data2)<-seq(from=5, to=100, by=5) # Rownames are now the population sizes instead of fitness values
+rownames(data2T)<-seq(from=5, to=100, by=5)
+s<-c()
+sT<-c()
+for(i in 1:length(data2[,1])){
+  for(j in 1:length(data2[1,])){
+    if (data2[i,j]==0){
+      data2T[i,j]<-NA
+    } else{
+      
+    }
+  }
+}
+
+  s<-rowMeans(data2, na.rm=TRUE)
+  sT<-rowMeans(data2T, na.rm=TRUE)
+
+
+data2T<-cbind(sT,data2T)
+data2<-cbind(s,data2)
+```
+
+```{r Graphing CG 2}
+CG3<-ggplot(data=data2, aes(x=as.numeric(rownames(data2)), y=data2[,1]))+
+  geom_point()+
+  stat_smooth(method="loess", color="magenta4")+
+  xlab("Pop size")+
+  ylab("")+
+  ylim(0,1)
+  
+CG4<-ggplot(data=data2T, aes(x=as.numeric(rownames(data2T)), y=data2T[,1]))+
+  geom_point()+
+  stat_smooth(method="loess", color="magenta4")+
+  xlab("Pop size")+
+  ylab("")+
+  scale_y_continuous(trans="log10")
+
+(CG1 + CG3)/(CG2 + CG4) + plot_annotation("Stochastic Modeling Class pt. 1")
+ ggsave("/./Users/nicklatina/Desktop/StochasticModelingClassPt1.jpeg", width=9, height=7)
+
+```
+## caption:
+Moran process carried out on a complete graph (every node in population N is degree N-1). For each graph, the starting mutant population is 1. The two graphs on the left display average fixation probability (top) and average time to fixation (bottom) for the mutant allele. Total population size = 50, relative fitness of the mutant varies across the x axis, each data point is the average of 420 simulations (for the 'Time to fixation' plot, all simulations that resulted in extinction of the mutant allele were ignored). The two graphs on the right display mean fixation probability (top) and mean time to fixation (bottom) for the mutant allele. Total population size varies across the x axis, relative fitness of mutant allele = 1.1, each data point is the average of 420 simulations. Again, simulations that resulted in mutant extinction were ignored when calculating average time to fixations.
+
+```{r 1D lattice}
+fi<-1 #fitness of parental
+gi<-5 #fitness of mutant
+N<-50 #Pop size
+cycles<-420
+
+OneD<-data.frame()
+OneDT<-data.frame()
+
+for(gi in seq(from=1, to=5, by=0.25)){
+  
+   Time=c()
+   Outcome=c()
+   
+  for(i in 1:cycles){
+    
+  t=0
+  pop<-rep(0,N); pop[[sample(1:N, 1)]]<-1 #create population and populate with one mutant
+  nP<-N-sum(pop);nM<-sum(pop) #defining number of each population
+  
+while (0<sum(pop) && N>sum(pop) && t<50000){
+  
+  edges<-c(min(which(pop==1)), max(which(pop==1))) # find the edges of the mutant pop
+  
+  #if the pop is organized like '1100011' ("island of 0s", instead of 0011100 "island of 1s"), then the current 'edges' object will not reflect the true edges. This if else tests for a population in a conformation like this (aka Case = 0), and fixes the edges object accordingly
+  
+if(max(edges)==N && min(edges)==1 && !(sum(pop) == N)){ 
+    edges<-c((min(which(pop==0))-1),(max(which(pop==0))+1))
+    Case<-0 # ex. 1100011
+  } else{
+    Case<-1 # ex. 0011100
+  } 
+  
+  nP<-N-sum(pop);nM<-sum(pop) #defining number of each population
+  MG<-gi/(gi*nM+nP) # Prob that the mutant population will grow (Mutant birth*parental death)
+  PG<-1/(gi*nM+nP) # Prob that the parental population will grow (Parental birth*mutant death)
+  
+    DV<-runif(1) # generate number between 0:1
+    n<-sample(1:2, 1) # flip a coin
+    if (DV<MG){ # Is the random number between 0 and the probability that the mutant population will grow?
+      if(edges[[n]]==1){ # If the first node in the population vector is chosen,
+          if(Case==1){ # and this implies that the final node is 0,
+            pop[[N]]<-1 # Make the final node == 1
+          } else{ # otherwise, if the final node is already 1, this implies that node 2 is 0, so
+            pop[[2]]<-1 # make node 2 == 1
+          }
+      } else if(edges[[n]] == N){ # If instead the chosen node is the last node,
+         if(Case==1){ # and the first node == 0,
+           pop[[1]]<-1 # make the first node == 1.
+         } else { # otherwise, if the first node == 1, then this implies that the second to last node == 0, so
+        pop[[N-1]]<-1 # make node N-1 == 1
+      }
+      } else{ # if instead the chosen node is not on the edge, we have to go through 4 scenarios. 
+        # 1.the edge is the minimum and there are 0s to the left
+        # 2. the edge is the minimum and there are 0s to the right
+        # 3. the edge is the maximum and there are zeros to the right
+        # 4. the edge is the maximum and there are zeros to the left
+        if(n==1){
+          if(Case==1){
+            pop[[edges[[1]]-1]]<-1 #Scenario 1
+          } else {
+            pop[[edges[[1]]+1]]<-1 #Scenario 2
+          }
+        } else{
+          if(Case==1){
+            pop[[edges[[2]]+1]]<-1 # Scenario 3
+          } else{
+            pop[[edges[[2]]-1]]<-1 # Scenario 4
+          }
+        }
+      }
+    } else if(DV > (1-PG)){ # otherwise, if the random number between 0 and 1 is between (1- prob of parental growth) and 1,
+      pop[[edges[[n]]]]<-0 #turn the chosen edge into a 0
+    } else{
+    }
+    t<-t+1 # Count time step
+}
+  Time<-c(Time,t)
+  Outcome<-c(Outcome, (sum(pop)/N)) # this stores a 0 if A wins, and a 1 if B wins
+  }
+OneD<-rbind(OneD, Outcome)
+OneDT<-rbind(OneDT, Time)
+}
+
+for(i in 1:length(OneD[,1])){
+  for(j in 1:length(OneD[1,])){
+    if (OneD[i,j]==0){
+      OneDT[i,j]<-NA
+    } else{
+   }
+ }
+}
+
+m<-rowMeans(OneD)
+mT<-rowMeans(OneDT, na.rm = TRUE)
+OneD<-cbind(m,OneD)
+OneDT<-cbind(mT, OneDT)
+rownames(OneD)<-seq(from=1, to=5, by=0.25)
+rownames(OneDT)<-seq(from=1, to=5, by=0.25)
+```
+
+```{r 1D lattice Graph+ complete}
+OD1<-ggplot(data=OneD, aes(x=as.numeric(rownames(OneD)), y=OneD[,1]))+
+  geom_point(shape=13, size=2, color="chartreuse2")+
+  stat_smooth(method="loess", color="chartreuse2", fill=NA)+
+  geom_point(data=data, aes(x=as.numeric(rownames(data)), y=data[,1]), shape=24, size=2, color="magenta4")+
+  stat_smooth(data=data, aes(x=as.numeric(rownames(data)), y=data[,1]), method="loess", color="magenta4", fill=NA)+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Fixation Probability")
+  
+OD2<-ggplot(data=OneDT, aes(x=as.numeric(rownames(OneDT)), y=OneDT[,1]))+
+  geom_point(shape=13, size=2, color="chartreuse2")+
+  stat_smooth(method="loess", color="chartreuse2", fill=NA)+
+  geom_point(data=dataT, aes(x=as.numeric(rownames(dataT)), y=dataT[,1]), shape=24, size=2,color="magenta4")+
+  stat_smooth(data=dataT, aes(x=as.numeric(rownames(dataT)), y=dataT[,1]), method="loess", color="magenta4", fill=NA)+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Time to Fixation")+
+  scale_y_continuous(trans="log10")
+
+
+```
+
+```{r 1D lattice Pop}
+fi<-1 #fitness of parental
+gi<-1.1 #fitness of mutant
+N<-50 #Pop size
+cycles<-420
+
+OneD2<-data.frame()
+OneDT2<-data.frame()
+for(N in seq(from=5, to=100, by=5)){
+   Time=c()
+   Outcome=c()
+  for(i in 1:cycles){
+  t=0
+
+  pop<-rep(0,N); pop[[sample(1:N, 1)]]<-1 #create population and populate with one mutant
+  nP<-N-sum(pop);nM<-sum(pop) #defining number of each population
+
+while (0<sum(pop) && N>sum(pop) && t<50000){
+  
+  edges<-c(min(which(pop==1)), max(which(pop==1))) # find the edges of the mutant pop
+if(max(edges)==N && min(edges)==1 && !(sum(pop) == N)){ 
+    edges<-c((min(which(pop==0))-1),(max(which(pop==0))+1))
+    Case<-0
+  } else{
+    Case<-1
+  } #if the pop is organized like '100011', then the current 'edges' object will not reflect the true edges. This if else tests for a population in a conformation like this (aka Case = 0), and fixes the edges object accordingly
+  
+    nP<-N-sum(pop);nM<-sum(pop) #defining number of each population
+  MG<-gi/(gi*nM+nP) # Prob that the mutant population will grow (Mutant birth*parental death)
+  PG<-1/(gi*nM+nP) # Prob that the parental population will grow (Parental birth*mutant death)
+  
+    DV<-runif(1) # generate numnber between 0:1
+    n<-sample(1:2, 1) # flip a coin
+    if (DV<MG){ # Is the random number between 0 and the probability that the mutant population will grow?
+      if(edges[[n]]==1){ # If the first node in the population vector is chosen,
+          if(Case==1){ # and this implies that the final node is 0,
+            pop[[N]]<-1 # Make the final node == 1
+          } else{ # otherwise, if the final node is already 1, this implies that node 2 is 0, so
+            pop[[2]]<-1 # make node 2 == 1
+          }
+      } else if(edges[[n]] == N){ # If instead the chosen node is the last node,
+         if(Case==1){ # and the first node == 0,
+           pop[[1]]<-1 # make the first node == 1.
+         } else { # otherwise, if the first node == 1, then this implies that the second to last node == 0, so
+        pop[[N-1]]<-1 # make node N-1 == 1
+      }
+      } else{ # if instead the chosen node is not on the edge, we have to go through 4 scenarios. 
+        # 1.the edge is the minimum and there are 0s to the left
+        # 2. the edge is the minimum and there are 0s to the right
+        # 3. the edge is the maximum and there are zeros to the right
+        # 4. the edge is the maximum and there are zeros to the left
+        if(n==1){
+          if(Case==1){
+            pop[[edges[[1]]-1]]<-1 #Scenario 1
+          } else {
+            pop[[edges[[1]]+1]]<-1 #Scenario 2
+          }
+        } else{
+          if(Case==1){
+            pop[[edges[[2]]+1]]<-1 # Scenario 3
+          } else{
+            pop[[edges[[2]]-1]]<-1 # Scenario 4
+          }
+        }
+      }
+    } else if(DV > (1-PG)){ # otherwise, if the random number between 0 and 1 is between (1- prob of parental growth) and 1,
+      pop[[edges[[n]]]]<-0 #turn the chosen edge 1 into a 0
+    } else{
+    }
+    t<-t+1 # Count time step
+}
+  Time<-c(Time,t)
+  Outcome<-c(Outcome, (sum(pop)/N)) # this stores a 0 if A wins, and a 1 if B wins
+  }
+OneD2<-rbind(OneD2, Outcome)
+OneDT2<-rbind(OneDT2, Time)
+}
+
+for(i in 1:length(OneD2[,1])){
+  for(j in 1:length(OneD2[1,])){
+    if (OneD2[i,j]==0){
+      OneDT2[i,j]<-NA
+    } else{
+   }
+ }
+}
+
+m<-rowMeans(OneD2)
+mT<-rowMeans(OneDT2, na.rm = TRUE)
+OneD2<-cbind(m,OneD2)
+OneDT2<-cbind(mT, OneDT2)
+rownames(OneD2)<-seq(from=5, to=100, by=5)
+rownames(OneDT2)<-seq(from=5, to=100, by=5)
+```
+
+```{r complete+1Dlattice}
+OD3<-ggplot(data=OneD2, aes(x=as.numeric(rownames(OneD2)), y=OneD2[,1]))+
+  geom_point(shape=13, size=2, color="chartreuse2")+
+  stat_smooth(method="loess", color="chartreuse2", fill=NA)+
+  geom_point(data=data2, aes(x=as.numeric(rownames(data2)), y=data2[,1]), shape=24, size=2,color="magenta4")+ #
+  stat_smooth(data=data2, aes(x=as.numeric(rownames(data2)), y=data2[,1]), method="loess", color="magenta4", fill=NA)+ #
+  xlab("mutant fitness/parental fitness")+ #
+  ylab("Fixation Probability")+ #
+  ylim(0,1)
+  
+OD4<-ggplot(data=OneDT2, aes(x=as.numeric(rownames(OneDT2)), y=OneDT2[,1]))+
+  geom_point(shape=13, size=2,color="chartreuse2")+
+  stat_smooth(method="loess", color="chartreuse2", fill=NA)+
+  geom_point(data=data2T, aes(x=as.numeric(rownames(data2T)), y=data2T[,1]), shape=24, size=2,color="magenta4")+
+  stat_smooth(data=data2T, aes(x=as.numeric(rownames(data2T)), y=data2T[,1]), method="loess", color="magenta4", fill=NA)+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Time to Fixation")+
+  scale_y_continuous(trans="log10")
+
+(OD1 + OD3)/(OD2 + OD4) + plot_annotation("Stochastic Modeling Class pt. 2")
+ ggsave("/./Users/nicklatina/Desktop/StochasticModelingClassPt2.jpeg", width=9, height=7)
+```
+
+```{r Star Graph}
+
+fi<-1 #fitness of A
+S<-50 # number of spokes
+
+cycles<-420
+
+Star<-data.frame(); StarT<-data.frame()
+for (gi in seq(from=1, to=5, by=0.25)){
+  
+Outcome<-c()
+Time<-c()
+
+for (i in 1:cycles){
+  t<-0
+  N<-S+1# account for the center in the total population Number
+  Pop<-c(S,0) # Setup pop to have all parental, no mutants
+  DV<-sample(1:N, 1) # this statement randomly populates one of the nodes (spoke or center) with a mutant
+  if(DV == 1){ 
+    Center=c(0,1)
+  } else{
+    Pop[[2]]<-1
+    Pop[[1]]<-S-1
+    Center=c(1,0)
+  }
+
+    while ((Center[[1]]+Pop[[1]])>0 && (Center[[2]]+Pop[[2]])>0 && t <= 50000){
+    
+      
+      #Pop<-c(25,25)
+      nP<-Pop[[1]] ; nM<-Pop[[2]]
+      #Free center:
+    S0= nM/((gi*nM+N-nM)*(N-1))#Prob that a spoke goes to 0
+    C1= (gi*nM)/(gi*nM+N-nM)#Prob that the center goes to 1
+    
+      #Occupied center:
+    
+    S1= (gi*(N-nM-1))/(((gi*nM)+gi+N-nM-1)*(N-1))#Prob that a spoke goes to 1
+    C0= (N-nM-1)/(gi*nM+gi+N-nM-1)# Prob that the center goes to 0
+    
+      DV<-runif(1)
+       if (Center[[1]] == 1){
+         if(DV <= S0){
+           Pop[[2]]<-Pop[[2]]-1
+           Pop[[1]]<-Pop[[1]]+1
+         } else if(DV >= (1-C1)){
+           Center=c(0,1)
+         } else{
+          }
+       } else if (Center[[2]] == 1){
+           if(DV <= S1){
+             Pop[[1]]<-Pop[[1]]-1
+             Pop[[2]]<-Pop[[2]]+1
+           } else if (DV >= (1-C0)){
+             Center=c(1,0)
+           } else{
+           }
+       } else {
+           print("oof")
+         }
+      t<-t+1
+    }
+  Outcome<-c(Outcome, (Pop[[2]]/S))
+  Time<-c(Time, t)
+}
+Star<-rbind(Star, Outcome)
+StarT<-rbind(StarT, Time)
+}
+
+for(i in 1:length(Star[,1])){
+  for(j in 1:length(Star[1,])){
+    if (Star[i,j]==0){
+      StarT[i,j]<-NA
+    } else{
+      
+    }
+  }
+}
+
+rownames(Star)=seq(from=1, to=5, by=0.25)
+rownames(StarT)=seq(from=1, to=5, by=0.25)
+
+s<-rowMeans(Star, na.rm = TRUE) ; sT<-rowMeans(StarT, na.rm = TRUE)
+Star<-cbind(s,Star) ; StarT<-cbind(sT, StarT)
+
+```
+
+```{r Star Graphing}
+SG1<-ggplot(data=Star, aes(x=as.numeric(rownames(Star)), y=Star[,1]))+
+  geom_point()+
+  stat_smooth(method="loess", color="magenta4")+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Fixation Probability")
+  
+SG2<-ggplot(data=StarT, aes(x=as.numeric(rownames(StarT)), y=StarT[,1]))+
+  geom_point()+
+  stat_smooth(method="loess", color="magenta4")+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Time to Fixation")+
+  scale_y_continuous(trans="log10")
+
+SG1
+SG2
+```
+
+```{r Star N}
+fi<-1 #fitness of A
+gi<-1.1 #fitness of B
+
+cycles<-420
+
+Star2<-data.frame(); Star2T<-data.frame()
+
+for (S in seq(from=5, to=100, by=5)){
+  
+Outcome<-c()
+Time<-c()
+
+for (i in 1:cycles){
+  t<-0
+  N<-S+1# account for the center in the total population Number
+  Pop<-c(S,0) # Setup pop to have all parental, no mutants
+  DV<-sample(1:N, 1) # this statement randomly populates one of the nodes (spoke or center) with a mutant
+  if(DV == 1){ 
+    Center=c(0,1)
+  } else{
+    Pop[[2]]<-1
+    Pop[[1]]<-S-1
+    Center=c(1,0)
+  }
+
+    while ((Center[[1]]+Pop[[1]])>0 && (Center[[2]]+Pop[[2]])>0){# && t <= 75000){
+    
+      
+      #Pop<-c(25,25)
+      nP<-Pop[[1]] ; nM<-Pop[[2]]
+      #Free center:
+    S0= nM/((gi*nM+N-nM)*(N-1))#Prob that a spoke goes to 0
+    C1= (gi*nM)/(gi*nM+N-nM)#Prob that the center goes to 1
+    
+      #Occupied center:
+    
+    S1= (gi*(N-nM-1))/(((gi*nM)+gi+N-nM-1)*(N-1))#Prob that a spoke goes to 1
+    C0= (N-nM-1)/(gi*nM+gi+N-nM-1)# Prob that the center goes to 0
+    
+      DV<-runif(1)
+       if (Center[[1]] == 1){
+         if(DV <= S0){
+           Pop[[2]]<-Pop[[2]]-1
+           Pop[[1]]<-Pop[[1]]+1
+         } else if(DV >= (1-C1)){
+           Center=c(0,1)
+         } else{
+          }
+       } else if (Center[[2]] == 1){
+           if(DV <= S1){
+             Pop[[1]]<-Pop[[1]]-1
+             Pop[[2]]<-Pop[[2]]+1
+           } else if (DV >= (1-C0)){
+             Center=c(1,0)
+           } else{
+           }
+       } else {
+           print("oof")
+         }
+      t<-t+1
+    }
+  Outcome<-c(Outcome, (Pop[[2]]/S))
+  Time<-c(Time, t)
+}
+Star2<-rbind(Star2, Outcome)
+Star2T<-rbind(Star2T, Time)
+}
+
+for(i in 1:length(Star2[,1])){
+  for(j in 1:length(Star2[1,])){
+    if (Star2[i,j]==0){
+      Star2T[i,j]<-NA
+    } else{
+      
+    }
+  }
+}
+
+rownames(Star2)=seq(from=5, to=100, by=5)
+rownames(Star2T)=seq(from=5, to=100, by=5)
+
+s<-rowMeans(Star2, na.rm = TRUE) ; sT<-rowMeans(Star2T, na.rm = TRUE)
+
+Star2<-cbind(s,Star2) ; Star2T<-cbind(sT,Star2T)
+```
+
+```{r Graphing all 3}
+OD1<-ggplot(data=OneD, aes(x=as.numeric(rownames(OneD)), y=OneD[,1]))+
+  geom_point(shape=13, size=2, color="chartreuse2")+
+  stat_smooth(method="loess", color="chartreuse2", fill=NA)+
+  geom_point(data=data, aes(x=as.numeric(rownames(data)), y=data[,1]), shape=24, size=2, color="magenta4")+
+  stat_smooth(data=data, aes(x=as.numeric(rownames(data)), y=data[,1]), method="loess", color="magenta4", fill=NA)+
+    geom_point(data=Star, aes(x=as.numeric(rownames(Star)), y=Star[,1]), shape=1, size=2, color="tomato")+
+  stat_smooth(data=Star, aes(x=as.numeric(rownames(Star)), y=Star[,1]), method="loess", color="tomato", fill=NA)+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Fixation Probability")
+  
+OD2<-ggplot(data=OneDT, aes(x=as.numeric(rownames(OneDT)), y=OneDT[,1]))+
+  geom_point(shape=13, size=2, color="chartreuse2")+
+  stat_smooth(method="loess", color="chartreuse2", fill=NA)+
+  geom_point(data=dataT, aes(x=as.numeric(rownames(dataT)), y=dataT[,1]), shape=24, size=2,color="magenta4")+
+  stat_smooth(data=dataT, aes(x=as.numeric(rownames(dataT)), y=dataT[,1]), method="loess", color="magenta4", fill=NA)+
+  geom_point(data=StarT, aes(x=as.numeric(rownames(StarT)), y=StarT[,1]), shape=1, size=2, color="tomato")+
+  stat_smooth(data=StarT, aes(x=as.numeric(rownames(StarT)), y=StarT[,1]), method="loess", color="tomato", fill=NA)+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Time to Fixation")+
+  scale_y_continuous(trans="log10")
+
+OD3<-ggplot(data=OneD2, aes(x=as.numeric(rownames(OneD2)), y=OneD2[,1]))+
+  geom_point(shape=13, size=2, color="chartreuse2")+
+  stat_smooth(method="loess", color="chartreuse2", fill=NA)+
+  geom_point(data=data2, aes(x=as.numeric(rownames(data2)), y=data2[,1]), shape=24, size=2,color="magenta4")+
+  stat_smooth(data=data2, aes(x=as.numeric(rownames(data2)), y=data2[,1]), method="loess", color="magenta4", fill=NA)+
+   geom_point(data=Star2, aes(x=as.numeric(rownames(Star2)), y=Star2[,1]), shape=1, size=2, color="tomato")+
+  stat_smooth(data=Star2, aes(x=as.numeric(rownames(Star2)), y=Star2[,1]), method="loess", color="tomato", fill=NA)+
+  xlab("mutant fitness/parental fitness")+ #
+  ylab("Fixation Probability")+ #
+  ylim(0,1)
+  
+OD4<-ggplot(data=OneDT2, aes(x=as.numeric(rownames(OneDT2)), y=OneDT2[,1]))+
+  geom_point(shape=13, size=2,color="chartreuse2")+
+  stat_smooth(method="loess", color="chartreuse2", fill=NA)+
+  geom_point(data=data2T, aes(x=as.numeric(rownames(data2T)), y=data2T[,1]), shape=24, size=2,color="magenta4")+
+  stat_smooth(data=data2T, aes(x=as.numeric(rownames(data2T)), y=data2T[,1]), method="loess", color="magenta4", fill=NA)+
+   geom_point(data=Star2T, aes(x=as.numeric(rownames(Star2T)), y=Star2T[,1]), shape=1, size=2, color="tomato")+
+  stat_smooth(data=Star2T, aes(x=as.numeric(rownames(Star2T)), y=Star2T[,1]), method="loess", color="tomato", fill=NA)+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Time to Fixation")+
+  scale_y_continuous(trans="log10")
+
+(OD1 + OD3)/(OD2 + OD4) + plot_annotation("Stochastic Modeling Class pt. 3")
+ ggsave("/./Users/nicklatina/Desktop/StochasticModelingClassPt3.jpeg", width=9, height=7)
+```
+
+```{r Graphing all 3, with envelopes}
+OD1<-ggplot(data=OneD, aes(x=as.numeric(rownames(OneD)), y=OneD[,1]))+
+  geom_point(shape=13, size=2, color="chartreuse2")+
+  stat_smooth(method="loess", color="chartreuse2")+
+  geom_point(data=data, aes(x=as.numeric(rownames(data)), y=data[,1]), shape=24, size=2, color="magenta4")+
+  stat_smooth(data=data, aes(x=as.numeric(rownames(data)), y=data[,1]), method="loess", color="magenta4")+
+    geom_point(data=Star, aes(x=as.numeric(rownames(Star)), y=Star[,1]), shape=1, size=2, color="tomato")+
+  stat_smooth(data=Star, aes(x=as.numeric(rownames(Star)), y=Star[,1]), method="loess", color="tomato")+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Fixation Probability")
+  
+OD2<-ggplot(data=OneDT, aes(x=as.numeric(rownames(OneDT)), y=OneDT[,1]))+
+  geom_point(shape=13, size=2, color="chartreuse2")+
+  stat_smooth(method="loess", color="chartreuse2")+
+  geom_point(data=dataT, aes(x=as.numeric(rownames(dataT)), y=dataT[,1]), shape=24, size=2,color="magenta4")+
+  stat_smooth(data=dataT, aes(x=as.numeric(rownames(dataT)), y=dataT[,1]), method="loess", color="magenta4")+
+  geom_point(data=StarT, aes(x=as.numeric(rownames(StarT)), y=StarT[,1]), shape=1, size=2, color="tomato")+
+  stat_smooth(data=StarT, aes(x=as.numeric(rownames(StarT)), y=StarT[,1]), method="loess", color="tomato")+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Time to Fixation")+
+  scale_y_continuous(trans="log10")
+
+OD3<-ggplot(data=OneD2, aes(x=as.numeric(rownames(OneD2)), y=OneD2[,1]))+
+  geom_point(shape=13, size=2, color="chartreuse2")+
+  stat_smooth(method="loess", color="chartreuse2")+
+  geom_point(data=data2, aes(x=as.numeric(rownames(data2)), y=data2[,1]), shape=24, size=2,color="magenta4")+
+  stat_smooth(data=data2, aes(x=as.numeric(rownames(data2)), y=data2[,1]), method="loess", color="magenta4")+
+   geom_point(data=Star2, aes(x=as.numeric(rownames(Star2)), y=Star2[,1]), shape=1, size=2, color="tomato")+
+  stat_smooth(data=Star2, aes(x=as.numeric(rownames(Star2)), y=Star2[,1]), method="loess", color="tomato")+
+  xlab("mutant fitness/parental fitness")+ #
+  ylab("Fixation Probability")+ #
+  ylim(0,1)
+  
+OD4<-ggplot(data=OneDT2, aes(x=as.numeric(rownames(OneDT2)), y=OneDT2[,1]))+
+  geom_point(shape=13, size=2,color="chartreuse2")+
+  stat_smooth(method="loess", color="chartreuse2")+
+  geom_point(data=data2T, aes(x=as.numeric(rownames(data2T)), y=data2T[,1]), shape=24, size=2,color="magenta4")+
+  stat_smooth(data=data2T, aes(x=as.numeric(rownames(data2T)), y=data2T[,1]), method="loess", color="magenta4")+
+   geom_point(data=Star2T, aes(x=as.numeric(rownames(Star2T)), y=Star2T[,1]), shape=1, size=2, color="tomato")+
+  stat_smooth(data=Star2T, aes(x=as.numeric(rownames(Star2T)), y=Star2T[,1]), method="loess", color="tomato")+
+  xlab("mutant fitness/parental fitness")+
+  ylab("Time to Fixation")+
+  scale_y_continuous(trans="log10")
+
+(OD1 + OD3)/(OD2 + OD4) + plot_annotation("Stochastic Modeling Class pt. 3")
+
+ ggsave("/./Users/nicklatina/Desktop/StochasticModelingClassPt3.jpeg", width=9, height=7)
+```
+
+```{r graveyard/testing grounds}
+test<-data.frame()
+for(N in seq(from=5, to=100, by=5)){
+  prop<-N
+  Pop<-c(N, round(prop*(N/(prop+1))), N-round(prop*(N/(prop+1)))) 
+  test<-rbind(test, Pop)
+}
+N<-40
+prop<-N
+Pop<-c(round(prop*(N/(prop+1))), N-round(prop*(N/(prop+1)))) 
+
+
+pop<-rep(0,N); pop[[sample(1:N, 1)]]<-1 #create population and populate with one mutant
+fi<-1
+gi<-1.1
+nP<-1;nM<-5 #defining number of each population
+pPB<-(fi*nP)/((fi*nP)+(gi*nM)) #Prob. that a parental cell will get chosen for birth
+pPD<-nP/N #Prob that a parental cell will be chosen for death
+pMB<-(gi*nM)/((gi*nM)+(nP*fi)) #Prob that a mutant cell will be chosen for birth
+pMD<-nM/N # Prob that a mutant cell will be chosen for death
+MG<-pMB*pPD # Prob that the mutant population will grow (Mutant birth*parental death)
+PG<-pPB*pMD # Prob that the parental population will grow (Parental birth*mutant death)
+
+(nP*nM)/(nP+nM)
+
+(nP*gi*nM)/(N*(gi*nM+fi*nP))
+gi/(gi*nM+nP)
+
+
+
+S0=nM/(((gi*nM)+N-nM)*(N-1)) #Prob that a spoke goes to 0
+S1=(gi/(gi*nM+gi+N-nM-1))*((N-nM-1)/(N-1)) #Prob that a spoke goes to 1
+C1=(gi*nM)/((gi*nM)+N-nM) #Prob that the center goes to 1
+C0=(N-nM-1)/(gi*nM+gi+N-nM-1) # Prob that the center goes to 0
+```
+
+
+
+
+
+
